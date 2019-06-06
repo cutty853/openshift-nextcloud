@@ -32,22 +32,42 @@ objects:
       requests:
         storage: ${PVC_SIZE}
 
+# Preparing the output for the build config
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    name: nextcloud
+    labels:
+      template: nextcloud
+  spec:
+    lookupPolicy:
+      local: true
+    tags:
+    - name: latest
+
 # Building nextcloud docker image
 - apiVersion: v1
   kind: BuildConfig
   metadata:
     name: nextcloud
+    labels:
+      app: ${APPLICATION_NAME}
   spec:
-    strategy:
-      dockerStrategy:
-        dockerfilePath: Dockerfile
     source:
       git:
         uri: ${NEXTCLOUD_IMAGE_REPO}
+    strategy:
+      dockerStrategy:
+        from:
+            kind: DockerImage
+            name: nextcloud:latest
+        forcePull: true
     output:
       to:
         kind: ImageStreamTag
         name: nextcloud:latest
+    triggers:
+    - type: ConfigChange
 # Deployment config for the nextcloud pod
 - apiVersion: v1
   kind: DeploymentConfig
@@ -65,7 +85,7 @@ objects:
       spec:
         containers:
           - name: nextcloud
-            image: nextcloud-test
+            image: nextcloud
             ports:
               - containerPort: 8080
                 protocol: "TCP"
@@ -74,16 +94,16 @@ objects:
             env:
             - name: NC_dbhost
               value: mariadb
-            - name: NC_dbuser
-              valueFrom:
-                secretKeyRef:
-                  key: database-user
-                  name: mariadb
-            - name: NC_dbpassword
-              valueFrom:
-                secretKeyRef:
-                  key: database-password
-                  name: mariadb
+            # - name: NC_dbuser
+            #   valueFrom:
+            #     secretKeyRef:
+            #       key: database-user
+            #       name: mariadb
+            # - name: NC_dbpassword
+            #   valueFrom:
+            #     secretKeyRef:
+            #       key: database-password
+            #       name: mariadb
             - name: NC_dbname
               value: nextcloud
             volumeMounts:
@@ -144,4 +164,4 @@ objects:
       targetPort: 8080-tcp
     to:
       kind: Service
-      name: nextcloud
+      name: ${APPLICATION_NAME}
