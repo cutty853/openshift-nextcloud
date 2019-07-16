@@ -1,0 +1,26 @@
+{
+   "kind": "List",
+   "apiVersion": "v1",
+   "items": [
+      {
+         "kind": "ImageStream",
+         "apiVersion": "v1",
+         "metadata": {
+            "name": "rebuild-nextcloud",
+            "labels": {
+               "template": "nextcloud"
+            }
+         },
+         "spec": {
+            "lookupPolicy": {
+               "local": true
+            },
+            "tags": [
+               {
+                  "name": "latest"
+               }
+            ]
+         }
+      }
+   ]
+}

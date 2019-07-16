@@ -9,10 +9,10 @@ iconClass: fa-cloud-upload
 parameters:
 - name: APPLICATION_NAME
   description: The name of the application (will also be the access subdomain)
-  value: nextcloud
-- name: NEXTCLOUD_IMAGE_REPO
-  description: Nextcloud image git repository
-  value: https://github.com/cutty853/openshift-nextcloud/
+  required: true
+- name: NEXTCLOUD_CONFIG
+  description: Nextcloud's PHP configuration
+  required: true
 - name: PVC_SIZE
   description: Nextcloud Persistent Volume size
   value: 5Gi
@@ -32,18 +32,15 @@ objects:
       requests:
         storage: ${PVC_SIZE}
 
-# Preparing the output for the build config
-- kind: ImageStream
-  apiVersion: v1
-  metadata:
-    name: nextcloud
-    labels:
-      template: nextcloud
-  spec:
-    lookupPolicy:
-      local: true
-    tags:
-    - name: latest
+# Configuration de Nextcloud
+# - kind: ConfigMap
+#   apiVersion: v1
+#   metadata:
+#     name: ${APPLICATION_NAME}-config
+#     labels:
+#       app: ${APPLICATION_NAME}
+#   data:
+#     config.php: "${NEXTCLOUD_CONFIG}"
 
 # Building nextcloud docker image
 - apiVersion: v1
@@ -53,19 +50,22 @@ objects:
     labels:
       app: ${APPLICATION_NAME}
   spec:
-    source:
-      git:
-        uri: ${NEXTCLOUD_IMAGE_REPO}
+    # source:
+    #   git:
+    #     uri: ${NEXTCLOUD_IMAGE_REPO}
     strategy:
       dockerStrategy:
         from:
             kind: DockerImage
-            name: nextcloud:latest
+            name: nextcloud:production
         forcePull: true
+    source:
+      type: "Dockerfile"
+      dockerfile: "FROM nextcloud:production\nRUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && sed 's/80/8080/g' -i /etc/apache2/ports.conf && sed 's/max_execution_time = 30/max_execution_time = 600/g' -i /usr/local/etc/php/php.ini-production && sed 's/max_input_time = 30/max_input_time = 600/g' -i /usr/local/etc/php/php.ini-production"
     output:
       to:
         kind: ImageStreamTag
-        name: nextcloud:latest
+        name: rebuild-nextcloud:latest
     triggers:
     - type: ConfigChange
 # Deployment config for the nextcloud pod
@@ -85,15 +85,15 @@ objects:
       spec:
         containers:
           - name: nextcloud
-            image: nextcloud
+            image: rebuild-nextcloud
             ports:
               - containerPort: 8080
                 protocol: "TCP"
             # TODO: Voir si ces variables servent vraiment lors de l'installation et si elle devrait pas plutot etre 
             # comme ça https://github.com/nextcloud/docker/issues/420
             env:
-            - name: NC_dbhost
-              value: mariadb
+            # - name: NC_dbhost
+            #   value: mariadb
             # - name: NC_dbuser
             #   valueFrom:
             #     secretKeyRef:
@@ -104,26 +104,35 @@ objects:
             #     secretKeyRef:
             #       key: database-password
             #       name: mariadb
-            - name: NC_dbname
-              value: nextcloud
+            # - name: NC_dbname
+            #   value: nextcloud
             volumeMounts:
             - name: ${APPLICATION_NAME}-source
               mountPath: /var/www/html
             - name: ${APPLICATION_NAME}-data
               subPath: data
               mountPath: /var/www/html/data
+            # TODO: Laisser ça et voir les fichiers importants
             - name: ${APPLICATION_NAME}-data
               subPath: config
               mountPath: /var/www/html/config
             - name: ${APPLICATION_NAME}-data
               subPath: apps
               mountPath: /var/www/html/custom_apps
+            # - name: ${APPLICATION_NAME}-config
+            #   mountPath: /var/www/html/config/config.php
+              # En fait le subPath permet de dire quoi prendre dans le dossier du volume
+              # subPath: config.php
         volumes:
         - name: ${APPLICATION_NAME}-source
           emptyDir: {}
         - name: ${APPLICATION_NAME}-data
           persistentVolumeClaim:
             claimName: ${APPLICATION_NAME}-data
+        # - name: ${APPLICATION_NAME}-config
+        #   configMap:
+        #     name: ${APPLICATION_NAME}-config
+        #     defaultMode: 0420
     replicas: 1
     strategy:
       type: Rolling
@@ -136,7 +145,7 @@ objects:
             - nextcloud
           from:
             kind: ImageStreamTag
-            name: nextcloud:latest
+            name: rebuild-nextcloud:latest
 # Service for the nextcloud application
 - apiVersion: v1
   kind: Service
