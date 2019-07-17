@@ -1,0 +1,2 @@
+# script used to do all the command of openshift deployment (oc create, etc...)
+deploy.sh
