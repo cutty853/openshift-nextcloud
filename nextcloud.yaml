@@ -19,18 +19,18 @@ parameters:
 
 objects:
 # Persistent volume for the nextcloud containers
-# - apiVersion: v1
-#   kind: PersistentVolumeClaim
-#   metadata:
-#     name: ${APPLICATION_NAME}-data
-#     labels:
-#       app: ${APPLICATION_NAME}
-#   spec:
-#     accessModes:
-#     - ReadWriteMany
-#     resources:
-#       requests:
-#         storage: ${PVC_SIZE}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: ${APPLICATION_NAME}-data
+    labels:
+      app: ${APPLICATION_NAME}
+  spec:
+    accessModes:
+    - ReadWriteMany
+    resources:
+      requests:
+        storage: ${PVC_SIZE}
 
 # Building nextcloud docker image
 - apiVersion: v1
@@ -51,7 +51,7 @@ objects:
         forcePull: true
     source:
       type: "Dockerfile"
-      dockerfile: "FROM nextcloud:production\nRUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && sed 's/80/8080/g' -i /etc/apache2/ports.conf && sed -i 's/Timeout 300/Timeout 1000/g' /etc/apache2/apache2.conf"
+      dockerfile: "FROM nextcloud:production\nRUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && sed 's/80/8080/g' -i /etc/apache2/ports.conf && sed -i 's/Timeout 300/Timeout 1000/g' /etc/apache2/apache2.conf && sed 's/UMASK\\s*022/UMASK 002/g' -i /etc/login.defs"
     output:
       to:
         kind: ImageStreamTag
@@ -99,24 +99,24 @@ objects:
             - name: MYSQL_DATABASE
               value: nextcloud_db
             volumeMounts:
-            # - name: ${APPLICATION_NAME}-source
-            #   mountPath: /var/www/html
-            # - name: ${APPLICATION_NAME}-data
-            #   # subPath: data
-            #   mountPath: /var/www/html/data
+            - name: ${APPLICATION_NAME}-source
+              mountPath: /var/www/html
+            - name: ${APPLICATION_NAME}-data
+              subPath: data
+              mountPath: /var/www/html/data
             # TODO: Laisser ça et voir les fichiers importants
-            # - name: ${APPLICATION_NAME}-data
-            #   subPath: config
-            #   mountPath: /var/www/html/config
-            # - name: ${APPLICATION_NAME}-data
-            #   subPath: apps
-            #   mountPath: /var/www/html/custom_apps
+            - name: ${APPLICATION_NAME}-data
+              subPath: config
+              mountPath: /var/www/html/config
+            - name: ${APPLICATION_NAME}-data
+              subPath: apps
+              mountPath: /var/www/html/custom_apps
         volumes:
-        # - name: ${APPLICATION_NAME}-source
-        #   emptyDir: {}
-        # - name: ${APPLICATION_NAME}-data
-        #   persistentVolumeClaim:
-        #     claimName: ${APPLICATION_NAME}-data
+        - name: ${APPLICATION_NAME}-source
+          emptyDir: {}
+        - name: ${APPLICATION_NAME}-data
+          persistentVolumeClaim:
+            claimName: ${APPLICATION_NAME}-data
     replicas: 1
     strategy:
       type: Rolling
