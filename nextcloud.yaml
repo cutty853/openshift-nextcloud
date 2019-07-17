@@ -10,37 +10,27 @@ parameters:
 - name: APPLICATION_NAME
   description: The name of the application (will also be the access subdomain)
   required: true
-- name: NEXTCLOUD_CONFIG
-  description: Nextcloud's PHP configuration
-  required: true
+# - name: NEXTCLOUD_CONFIG
+#   description: Nextcloud's PHP configuration
+#   required: true
 - name: PVC_SIZE
   description: Nextcloud Persistent Volume size
   value: 5Gi
 
 objects:
 # Persistent volume for the nextcloud containers
-- apiVersion: v1
-  kind: PersistentVolumeClaim
-  metadata:
-    name: ${APPLICATION_NAME}-data
-    labels:
-      app: ${APPLICATION_NAME}
-  spec:
-    accessModes:
-    - ReadWriteMany
-    resources:
-      requests:
-        storage: ${PVC_SIZE}
-
-# Configuration de Nextcloud
-# - kind: ConfigMap
-#   apiVersion: v1
+# - apiVersion: v1
+#   kind: PersistentVolumeClaim
 #   metadata:
-#     name: ${APPLICATION_NAME}-config
+#     name: ${APPLICATION_NAME}-data
 #     labels:
 #       app: ${APPLICATION_NAME}
-#   data:
-#     config.php: "${NEXTCLOUD_CONFIG}"
+#   spec:
+#     accessModes:
+#     - ReadWriteMany
+#     resources:
+#       requests:
+#         storage: ${PVC_SIZE}
 
 # Building nextcloud docker image
 - apiVersion: v1
@@ -61,7 +51,7 @@ objects:
         forcePull: true
     source:
       type: "Dockerfile"
-      dockerfile: "FROM nextcloud:production\nRUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && sed 's/80/8080/g' -i /etc/apache2/ports.conf && sed 's/max_execution_time = 30/max_execution_time = 600/g' -i /usr/local/etc/php/php.ini-production && sed 's/max_input_time = 30/max_input_time = 600/g' -i /usr/local/etc/php/php.ini-production"
+      dockerfile: "FROM nextcloud:production\nRUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && sed 's/80/8080/g' -i /etc/apache2/ports.conf && sed -i 's/Timeout 300/Timeout 1000/g' /etc/apache2/apache2.conf"
     output:
       to:
         kind: ImageStreamTag
@@ -92,47 +82,41 @@ objects:
             # TODO: Voir si ces variables servent vraiment lors de l'installation et si elle devrait pas plutot etre 
             # comme ça https://github.com/nextcloud/docker/issues/420
             env:
-            # - name: NC_dbhost
-            #   value: mariadb
-            # - name: NC_dbuser
-            #   valueFrom:
-            #     secretKeyRef:
-            #       key: database-user
-            #       name: mariadb
-            # - name: NC_dbpassword
-            #   valueFrom:
-            #     secretKeyRef:
-            #       key: database-password
-            #       name: mariadb
-            # - name: NC_dbname
-            #   value: nextcloud
+            - name: MYSQL_HOST
+              value: nextcloud-db:3306
+            - name: MYSQL_USER
+              value: nextcloud
+              # valueFrom:
+              #   secretKeyRef:
+              #     key: database-user
+              #     name: mariadb
+            - name: MYSQL_PASSWORD
+              value: azerty
+              # valueFrom:
+              #   secretKeyRef:
+              #     key: database-password
+              #     name: mariadb
+            - name: MYSQL_DATABASE
+              value: nextcloud_db
             volumeMounts:
-            - name: ${APPLICATION_NAME}-source
-              mountPath: /var/www/html
-            - name: ${APPLICATION_NAME}-data
-              subPath: data
-              mountPath: /var/www/html/data
+            # - name: ${APPLICATION_NAME}-source
+            #   mountPath: /var/www/html
+            # - name: ${APPLICATION_NAME}-data
+            #   # subPath: data
+            #   mountPath: /var/www/html/data
             # TODO: Laisser ça et voir les fichiers importants
-            - name: ${APPLICATION_NAME}-data
-              subPath: config
-              mountPath: /var/www/html/config
-            - name: ${APPLICATION_NAME}-data
-              subPath: apps
-              mountPath: /var/www/html/custom_apps
-            # - name: ${APPLICATION_NAME}-config
-            #   mountPath: /var/www/html/config/config.php
-              # En fait le subPath permet de dire quoi prendre dans le dossier du volume
-              # subPath: config.php
+            # - name: ${APPLICATION_NAME}-data
+            #   subPath: config
+            #   mountPath: /var/www/html/config
+            # - name: ${APPLICATION_NAME}-data
+            #   subPath: apps
+            #   mountPath: /var/www/html/custom_apps
         volumes:
-        - name: ${APPLICATION_NAME}-source
-          emptyDir: {}
-        - name: ${APPLICATION_NAME}-data
-          persistentVolumeClaim:
-            claimName: ${APPLICATION_NAME}-data
-        # - name: ${APPLICATION_NAME}-config
-        #   configMap:
-        #     name: ${APPLICATION_NAME}-config
-        #     defaultMode: 0420
+        # - name: ${APPLICATION_NAME}-source
+        #   emptyDir: {}
+        # - name: ${APPLICATION_NAME}-data
+        #   persistentVolumeClaim:
+        #     claimName: ${APPLICATION_NAME}-data
     replicas: 1
     strategy:
       type: Rolling
