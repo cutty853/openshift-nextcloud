@@ -10,12 +10,15 @@ parameters:
 - name: APPLICATION_NAME
   description: The name of the application (will also be the access subdomain)
   required: true
-# - name: NEXTCLOUD_CONFIG
-#   description: Nextcloud's PHP configuration
-#   required: true
+- name: NEXTCLOUD_CONFIG
+  description: Nextcloud's PHP configuration
+  required: true
 - name: PVC_SIZE
   description: Nextcloud Persistent Volume size
   value: 5Gi
+- name: APPLICATION_ROUTE
+  description: Hostname for the nextcloud application
+  required: true
 
 objects:
 # Persistent volume for the nextcloud containers
@@ -31,6 +34,15 @@ objects:
     resources:
       requests:
         storage: ${PVC_SIZE}
+
+- kind: ConfigMap
+  apiVersion: v1
+  metadata:
+    name: ${APPLICATION_NAME}-cfg
+    labels:
+      app: ${APPLICATION_NAME}
+  data:
+    config.php: "${NEXTCLOUD_CONFIG}"
 
 # Building nextcloud docker image
 - apiVersion: v1
@@ -51,7 +63,17 @@ objects:
         forcePull: true
     source:
       type: "Dockerfile"
-      dockerfile: "FROM nextcloud:production\nRUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && sed 's/80/8080/g' -i /etc/apache2/ports.conf && sed -i 's/Timeout 300/Timeout 1000/g' /etc/apache2/apache2.conf && sed 's/UMASK\\s*022/UMASK 002/g' -i /etc/login.defs"
+      dockerfile: "
+        FROM nextcloud:production\n
+        RUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && \\\n
+            sed 's/80/8080/g' -i /etc/apache2/ports.conf && \\\n
+            sed -i 's/Timeout 300/Timeout 1000/g' /etc/apache2/apache2.conf
+            # echo umask 002 >> /etc/apache2/envvars && \\\n
+            # echo umask 002 >> /etc/profile && \\\n
+            # echo umask 002 >> /etc/bash.bashrc && \\\n
+            # echo 'session optional pam_umask.so' >> /etc/pam.d/common-session && \\\n
+            # sed 's/UMASK\\s*022/UMASK\\t002/g' -i /etc/login.defs
+        "
     output:
       to:
         kind: ImageStreamTag
@@ -99,24 +121,31 @@ objects:
             - name: MYSQL_DATABASE
               value: nextcloud_db
             volumeMounts:
-            - name: ${APPLICATION_NAME}-source
+            - name: source
               mountPath: /var/www/html
-            - name: ${APPLICATION_NAME}-data
-              subPath: data
+            - name: data
               mountPath: /var/www/html/data
-            # TODO: Laisser ça et voir les fichiers importants
-            - name: ${APPLICATION_NAME}-data
-              subPath: config
+              subPath: data
+            - name: data
               mountPath: /var/www/html/config
-            - name: ${APPLICATION_NAME}-data
-              subPath: apps
+              subPath: config
+            # TODO: Laisser ça et voir les fichiers importants
+            - name: config
+              mountPath: /var/www/html/config/config.php
+              subPath: config.php
+            - name: data
               mountPath: /var/www/html/custom_apps
+              subPath: apps
         volumes:
-        - name: ${APPLICATION_NAME}-source
+        - name: source
           emptyDir: {}
-        - name: ${APPLICATION_NAME}-data
+        - name: data
           persistentVolumeClaim:
             claimName: ${APPLICATION_NAME}-data
+        - name: config
+          configMap:
+            name: ${APPLICATION_NAME}-cfg
+            defaultMode: 0660
     replicas: 1
     strategy:
       type: Rolling
@@ -152,7 +181,7 @@ objects:
     labels:
       app: ${APPLICATION_NAME}
   spec:
-    host: ${APPLICATION_NAME}.openshift.genome.ulaval.ca
+    host: ${APPLICATION_ROUTE}
     port:
       targetPort: 8080-tcp
     to:
