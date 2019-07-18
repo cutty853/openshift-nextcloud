@@ -48,6 +48,17 @@ objects:
   data:
     config.php: "${NEXTCLOUD_CONFIG}"
 
+- kind: Secret
+  apiVersion: v1
+  metadata:
+    name: database-secret
+    labels:
+      app: ${APPLICATION_NAME}
+  type: Opaque
+  stringData:
+    username: nextcloud
+    password: "${DATABASE_PASSWORD}"
+
 # Building nextcloud docker image
 - apiVersion: v1
   kind: BuildConfig
@@ -109,9 +120,15 @@ objects:
             - name: MYSQL_HOST
               value: nextcloud-db:3306
             - name: MYSQL_USER
-              value: nextcloud
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: username
             - name: MYSQL_PASSWORD
-              value: "${DATABASE_PASSWORD}"
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: password
             - name: MYSQL_DATABASE
               value: nextcloud_db
             volumeMounts:
@@ -217,9 +234,15 @@ objects:
           - name: mariadb
             env:
               - name: MYSQL_USER
-                value: nextcloud
+                valueFrom:
+                  secretKeyRef:
+                    name: database-secret
+                    key: username
               - name: MYSQL_PASSWORD
-                value: "${DATABASE_PASSWORD}"
+                valueFrom:
+                  secretKeyRef:
+                    name: database-secret
+                    key: password
               - name: MYSQL_DATABASE
                 value: nextcloud_db
             volumeMounts:
