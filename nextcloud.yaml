@@ -83,11 +83,6 @@ objects:
         RUN sed 's/80/8080/g' -i /etc/apache2/sites-available/000-default.conf && \\\n
             sed 's/80/8080/g' -i /etc/apache2/ports.conf && \\\n
             sed -i 's/Timeout 300/Timeout 1000/g' /etc/apache2/apache2.conf
-            # echo umask 002 >> /etc/apache2/envvars && \\\n
-            # echo umask 002 >> /etc/profile && \\\n
-            # echo umask 002 >> /etc/bash.bashrc && \\\n
-            # echo 'session optional pam_umask.so' >> /etc/pam.d/common-session && \\\n
-            # sed 's/UMASK\\s*022/UMASK\\t002/g' -i /etc/login.defs
         "
     output:
       to:
@@ -110,6 +105,21 @@ objects:
           app: ${APPLICATION_NAME}
           deploymentconfig: ${APPLICATION_NAME}
       spec:
+        initContainers:
+        # TODO: Faire un init-container pour attendre la base de données
+        - name: copy-config-map
+          image: busybox
+          # NOTE: Je passe par le configMap et pas par un 'echo' du contenu 
+          # de NEXTCLOUD_CONFIG car ce dernier contient des charactère spéciaux
+          # pour bash... (comme le $)
+          command: ['sh', '-c', 'cat /tmp/config.php > /var/www/html/config/config.php']
+          volumeMounts:
+          - name: data
+            mountPath: /var/www/html/config
+            subPath: config
+          - name: config
+            mountPath: /tmp/config.php
+            subPath: config.php
         containers:
           - name: nextcloud
             image: rebuild-nextcloud
@@ -140,10 +150,6 @@ objects:
             - name: data
               mountPath: /var/www/html/config
               subPath: config
-            # Ceci ne fonctione pas -> comprendre pourquoi
-            - name: config
-              mountPath: /var/www/html/config/config.php
-              subPath: config.php
             - name: data
               mountPath: /var/www/html/custom_apps
               subPath: apps
