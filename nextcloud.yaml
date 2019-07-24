@@ -10,9 +10,6 @@ parameters:
 - name: APPLICATION_NAME
   description: The name of the application (will also be the access subdomain)
   required: true
-- name: NEXTCLOUD_CONFIG
-  description: Nextcloud's PHP configuration
-  required: true
 - name: PVC_SIZE
   description: Nextcloud Persistent Volume size
   value: 5Gi
@@ -38,15 +35,6 @@ objects:
     resources:
       requests:
         storage: ${PVC_SIZE}
-
-- kind: ConfigMap
-  apiVersion: v1
-  metadata:
-    name: ${APPLICATION_NAME}-cfg
-    labels:
-      app: ${APPLICATION_NAME}
-  data:
-    config.php: "${NEXTCLOUD_CONFIG}"
 
 - kind: Secret
   apiVersion: v1
@@ -90,6 +78,7 @@ objects:
         name: rebuild-nextcloud:latest
     triggers:
     - type: ConfigChange
+
 # Deployment config for the nextcloud pod
 - apiVersion: v1
   kind: DeploymentConfig
@@ -105,21 +94,6 @@ objects:
           app: ${APPLICATION_NAME}
           deploymentconfig: ${APPLICATION_NAME}
       spec:
-        initContainers:
-        # TODO: Faire un init-container pour attendre la base de données
-        - name: copy-config-map
-          image: busybox
-          # NOTE: Je passe par le configMap et pas par un 'echo' du contenu 
-          # de NEXTCLOUD_CONFIG car ce dernier contient des charactère spéciaux
-          # pour bash... (comme le $)
-          command: ['sh', '-c', 'cat /tmp/config.php > /var/www/html/config/config.php']
-          volumeMounts:
-          - name: data
-            mountPath: /var/www/html/config
-            subPath: config
-          - name: config
-            mountPath: /tmp/config.php
-            subPath: config.php
         containers:
           - name: nextcloud
             image: rebuild-nextcloud
@@ -159,10 +133,6 @@ objects:
         - name: data
           persistentVolumeClaim:
             claimName: ${APPLICATION_NAME}-data
-        - name: config
-          configMap:
-            name: ${APPLICATION_NAME}-cfg
-            defaultMode: 0640
     replicas: 1
     strategy:
       type: Rolling
